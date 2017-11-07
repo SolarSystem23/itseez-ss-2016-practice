@@ -5,6 +5,7 @@
 
 using std::string;
 using std::shared_ptr;
+using namespace std;
 using namespace cv;
 
 shared_ptr<Tracker> Tracker::CreateTracker(const string &name) {
@@ -15,8 +16,9 @@ shared_ptr<Tracker> Tracker::CreateTracker(const string &name) {
     throw "name != median_flow";
 }
 
-
 bool MedianFlowTracker::Init(const cv::Mat &frame, const cv::Rect &roi) {
+    cv::Mat gray_frame;
+    cv::cvtColor(frame, gray_frame, CV_BGR2GRAY);
     frame_= frame;
     position_ = roi;
     return !frame_.empty();
@@ -27,9 +29,9 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     int maxCorners = 100;
     double qualityLevel = 0.3;
     int minDistance = 7;
-    std::vector<Point> prevPts;
-    std::vector<Point> nextPts;
-    std::vector<uchar > status;
+    std::vector<Point2f> prevPts;
+    std::vector<Point2f> nextPts;
+    std::vector<uchar> status;
     std::vector<float> err;
     cv::Mat gray_frame;
     cv::cvtColor(frame, gray_frame, CV_BGR2GRAY);
@@ -41,10 +43,10 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
         cv::circle(roiPrev, point, 5, cv::Scalar(0, 255, 0));
     }
 
-    calcOpticalFlowPyrLK(roiPrev, gray_frame, prevPts, nextPts, status, err);
+    calcOpticalFlowPyrLK(frame_, gray_frame, prevPts, nextPts, status, err);
 
     for(const auto& point : nextPts){
-        cv::circle(frame, point, 5, cv::Scalar(0, 0, 255));
+        cv::circle(frame, point, 2, cv::Scalar(0, 0, 255));
     }
 
     for(int i = 0 ; i < status.size(); i++){
@@ -53,7 +55,7 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
             prevPts.erase(prevPts.begin() + i);
         }
     }
-    std::vector<Point> backwards;
+    std::vector<Point2f> backwards;
     status.clear();
     err.clear();
 

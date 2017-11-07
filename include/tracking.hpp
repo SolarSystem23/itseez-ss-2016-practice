@@ -4,7 +4,7 @@
 #include <string>
 
 #include "opencv2/core/core.hpp"
-
+using namespace std;
 class Tracker {
  public:
   static std::shared_ptr<Tracker> CreateTracker(const std::string &name);
@@ -14,8 +14,8 @@ class Tracker {
 
 class MedianFlowTracker : public Tracker {
 public:
-    virtual bool Init(const cv::Mat &frame, const cv::Rect &roi);
-    virtual cv::Rect Track(const cv::Mat &frame);
+    virtual bool Init(const cv::Mat &frame, const cv::Rect &roi) override ;
+    virtual cv::Rect Track(const cv::Mat &frame) override ;
 
 protected:
     cv::Rect position_;
