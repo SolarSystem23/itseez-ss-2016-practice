@@ -23,6 +23,7 @@ bool MedianFlowTracker::Init(const cv::Mat &frame, const cv::Rect &roi) {
 }
 
 cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
+    cvtColor(frame_, frame_, CV_BGR2GRAY);
     int maxCorners = 100;
     double qualityLevel = 0.3;
     int minDistance = 7;
@@ -30,6 +31,8 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     std::vector<Point> nextPts;
     std::vector<uchar > status;
     std::vector<float> err;
+    cv::Mat gray_frame;
+    cv::cvtColor(frame, gray_frame, CV_BGR2GRAY);
     cv::Mat roiPrev = frame_(position_);
     goodFeaturesToTrack(roiPrev, prevPts, maxCorners,
                         qualityLevel, minDistance);
@@ -38,7 +41,7 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
         cv::circle(roiPrev, point, 5, cv::Scalar(0, 255, 0));
     }
 
-    calcOpticalFlowPyrLK(roiPrev, frame, prevPts, nextPts, status, err);
+    calcOpticalFlowPyrLK(roiPrev, gray_frame, prevPts, nextPts, status, err);
 
     for(const auto& point : nextPts){
         cv::circle(frame, point, 5, cv::Scalar(0, 0, 255));
@@ -54,7 +57,7 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     status.clear();
     err.clear();
 
-    calcOpticalFlowPyrLK(frame, frame_, nextPts, backwards, status, err);
+    calcOpticalFlowPyrLK(gray_frame, frame_, nextPts, backwards, status, err);
     //static_assert(nextPts.size() == backwards.size());
     int shiftSize = nextPts.size();
     std::vector<double>shift(shiftSize);
@@ -110,5 +113,7 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     shiftX = distanceX[sizeOfVectors / 2];
     shiftY = distanceY[sizeOfVectors / 2];
 
-    return cv::Rect(position_.x + shiftX, position_.y + shiftY, width, height);
+    frame_    = frame;
+    position_ = cv::Rect(position_.x + shiftX, position_.y + shiftY, width, height);;
+    return position_;
 }

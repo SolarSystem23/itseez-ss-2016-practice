@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <opencv2/opencv.hpp>
+#include <tracking.hpp>
 
 #include "opencv2/core.hpp"
 
@@ -14,6 +15,34 @@ const char* kAbout =
 const char* kOptions =
     "{ v video        |        | video to process         }"
     "{ h ? help usage |        | print help message       }";
+
+struct MouseCallbackState {
+    bool is_selection_started;
+    bool is_selection_finished;
+    Point point_first;
+    Point point_second;
+}mouseCallbackState;
+
+void onMouse(int event, int x, int y, int flags, void* userdata){
+    if(event == cv::EVENT_LBUTTONDOWN){
+        mouseCallbackState.is_selection_started  = true;
+        mouseCallbackState.is_selection_finished = false;
+        mouseCallbackState.point_first.x = x;
+        mouseCallbackState.point_first.y = y;
+    }
+    if(event == cv::EVENT_LBUTTONUP){
+        mouseCallbackState.is_selection_started  = false;
+        mouseCallbackState.is_selection_finished = true;
+        mouseCallbackState.point_second.x = x;
+        mouseCallbackState.point_second.y = y;
+    }
+    if(event == cv::EVENT_MOUSEMOVE){
+        if(!mouseCallbackState.is_selection_finished){
+            mouseCallbackState.point_second.x = x;
+            mouseCallbackState.point_second.y = y;
+        }
+    }
+};
 
 
 int main(int argc, const char** argv) {
@@ -29,10 +58,37 @@ int main(int argc, const char** argv) {
 
   cv::VideoCapture video("/home/tolik/myWorkSpace/github/itseez-ss-2016-practice/test/test_data/video/logo.mp4");
   cv::namedWindow("window");
+  cv::setMouseCallback("window", onMouse);
+  cv::Rect object;
   cv::Mat frame;
   video >> frame;
-  cv::imshow("window", frame);
-  cv::waitKey(0);
+  cv::Mat copy_frame;
+  while(true){
+      frame.copyTo(copy_frame);
+      if(mouseCallbackState.is_selection_started)
+          object = cv::Rect(mouseCallbackState.point_first.x,
+                          mouseCallbackState.point_first.y,
+                          mouseCallbackState.point_second.x -
+                          mouseCallbackState.point_first.x,
+                          mouseCallbackState.point_second.y -
+                          mouseCallbackState.point_first.y);
 
+      cv::rectangle(copy_frame, object, cv::Scalar(0, 255, 0));
+      cv::imshow("window", copy_frame);
+      int c = cv::waitKey(33);
+      if(c == 27)
+          break;
+  }
+  auto tracker = Tracker::CreateTracker("median_flow");
+  tracker->Init(frame, object);
+  while(true){
+      video >> frame;
+      cv::Rect roi = tracker->Track(frame);
+      cv::rectangle(frame, roi, cv::Scalar(0, 255, 0));
+      cv::imshow("window", frame);
+      int c = cv::waitKey(33);
+      if(c == 27)
+          break;
+  }
   return 0;
 }
