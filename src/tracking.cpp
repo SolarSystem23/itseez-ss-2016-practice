@@ -26,7 +26,6 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     int maxCorners = 100;
     double qualityLevel = 0.3;
     int minDistance = 7;
-//    int blockSize = 7;
     std::vector<Point> prevPts;
     std::vector<Point> nextPts;
     std::vector<uchar > status;
@@ -51,42 +50,65 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
             prevPts.erase(prevPts.begin() + i);
         }
     }
-    static_assert(nextPts.size() == prevPts.size());
+    std::vector<Point> backwards;
+    status.clear();
+    err.clear();
+
+    calcOpticalFlowPyrLK(frame, frame_, nextPts, backwards, status, err);
+    //static_assert(nextPts.size() == backwards.size());
+    int shiftSize = nextPts.size();
+    std::vector<double>shift(shiftSize);
+
+    for(int i = 0; i < shiftSize; i++){
+        shift[i] = cv::norm(nextPts[i] - backwards[i]);
+    }
+    std::vector<double> copyShift(shiftSize);
+    std::copy(shift.begin(), shift.end(), copyShift.begin());
+    double medianShift;
+    std::nth_element(shift.begin(), shift.begin() + shiftSize / 2, shift.end());
+    for(int i = 0 ; i < shiftSize; i++){
+        if(copyShift[i] > medianShift){
+            prevPts.erase(prevPts.begin() + i);
+            nextPts.erase(nextPts.begin() + i);
+        }
+    }
+
+    //static_assert(nextPts.size() == prevPts.size());
     int sizeOfVectors = nextPts.size();
     std::vector<double> distancePrev;
     std::vector<double> distanceNext;
 
     for(int i = 0 ; i < sizeOfVectors - 1; i++ ){
         for(int j = i + 1; j < sizeOfVectors; j++){
-            //distancePrev.push_back();
+            distancePrev.push_back(cv::norm(prevPts[i] - prevPts[j]));
+            distanceNext.push_back(cv::norm(nextPts[i] - nextPts[j]));
         }
     }
 
-    std::vector<Point> distance;
-    for(int i = 0 ; i < prevPts.size(); i++){
-        distance[i].x = nextPts[i].x - prevPts[i].x;
-        distance[i].y = nextPts[i].y - prevPts[i].y;
+    std::vector<double> scales(distanceNext.size());
+    int sizeOfScales = scales.size();
+    for(int i = 0 ; i < sizeOfScales; i++ ){
+        scales[i] = distancePrev[i] / distanceNext[i];
     }
-    size_t n = distance.size() / 2;
+    std::nth_element(scales.begin(), scales.begin() + sizeOfScales / 2, scales.end());
 
+    double median = scales[sizeOfScales / 2];
+    auto width  = saturate_cast<int>(median * position_.width);
+    auto height = saturate_cast<int>(median * position_.height);
 
-    Point median;
+    std::vector<double> distanceX(sizeOfVectors);
+    std::vector<double> distanceY(sizeOfVectors);
+    for(int i = 0 ; i < sizeOfVectors; i++){
+        distanceX[i] = prevPts[i].x - nextPts[i].x;
+        distanceY[i] = prevPts[i].y - nextPts[i].y;
+    }
 
-    std::nth_element(distance.begin(), distance.begin() + n, distance.end(), [](const Point& p1,
-                                                                                const Point& p2){
-        return p1.x < p2.x;
-    });
+    double shiftX, shiftY;
+    std::nth_element(distanceX.begin(), distanceX.begin() + sizeOfVectors / 2, distanceX.end());
+    std::nth_element(distanceY.begin(), distanceY.begin() + sizeOfVectors / 2, distanceY.end());
 
-    median.x = distance[n].x;
+    shiftX = distanceX[sizeOfVectors / 2];
+    shiftY = distanceY[sizeOfVectors / 2];
 
-    std::nth_element(distance.begin(), distance.begin() + n, distance.end(), [](const Point& p1,
-                                                                                const Point& p2){
-        return p1.y < p2.y;
-    });
-
-    median.y = distance[n].y;
-
-
-    return cv::Rect(median.x - position_.width / 2, median.y - position_.height / 2,
-                    position_.width, position_.height);
+    return cv::Rect(position_.x + shiftX, position_.y + shiftY, width, height);
 }
