@@ -6,6 +6,7 @@
 using std::string;
 using std::shared_ptr;
 using namespace cv;
+using  namespace std;
 
 shared_ptr<Tracker> Tracker::CreateTracker(const string &name) {
   if (name == "median_flow") {
@@ -15,78 +16,114 @@ shared_ptr<Tracker> Tracker::CreateTracker(const string &name) {
     throw "name != median_flow";
 }
 
-
 bool MedianFlowTracker::Init(const cv::Mat &frame, const cv::Rect &roi) {
-    frame_= frame;
-    position_ = roi;
+    if (!frame.empty()){
+        position_ = roi;
+        cvtColor(frame, frame_, CV_BGR2GRAY);
+    }
     return !frame_.empty();
 }
 
 cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
-    int maxCorners = 100;
-    double qualityLevel = 0.3;
-    int minDistance = 7;
-//    int blockSize = 7;
-    std::vector<Point> prevPts;
-    std::vector<Point> nextPts;
-    std::vector<uchar > status;
-    std::vector<float> err;
-    cv::Mat roiPrev = frame_(position_);
-    goodFeaturesToTrack(roiPrev, prevPts, maxCorners,
-                        qualityLevel, minDistance);
+    vector<Point2f> corners;
+    Mat object = frame_(position_);
+    goodFeaturesToTrack(object, corners, 100, 0.01, 5);
 
-    for(const auto& point : prevPts){
-        cv::circle(roiPrev, point, 5, cv::Scalar(0, 255, 0));
+    if (corners.empty()) {
+        throw "corners is empty!!!";
     }
 
-    calcOpticalFlowPyrLK(roiPrev, frame, prevPts, nextPts, status, err);
+    Mat gray_frame;
+    cvtColor(frame, gray_frame, CV_BGR2GRAY);
+    vector<uchar> status;
+    vector<float> err;
+    vector<Point2f> next_pts;
 
-    for(const auto& point : nextPts){
-        cv::circle(frame, point, 5, cv::Scalar(0, 0, 255));
-    }
+    calcOpticalFlowPyrLK(frame_, gray_frame, corners,
+                         next_pts  , status , err);
 
-    for(int i = 0 ; i < status.size(); i++){
-        if(!status[i]){
-            nextPts.erase(nextPts.begin() + i);
-            prevPts.erase(prevPts.begin() + i);
+    for (int i = status.size() - 1; i >= 0; i--) {
+        if (status[i] == 0) {
+            status.erase(status.begin() + i);
+            corners.erase(corners.begin() + i);
+            next_pts.erase(next_pts.begin() + i);
+            err.erase(err.begin() + i);
         }
     }
-    static_assert(nextPts.size() == prevPts.size());
-    int sizeOfVectors = nextPts.size();
-    std::vector<double> distancePrev;
-    std::vector<double> distanceNext;
+    status.clear();
+    err.clear();
 
-    for(int i = 0 ; i < sizeOfVectors - 1; i++ ){
-        for(int j = i + 1; j < sizeOfVectors; j++){
-            //distancePrev.push_back();
+    if (corners.size() < 2)
+        throw "no corners";
+
+    vector<Point2f> prev_pts;
+    calcOpticalFlowPyrLK(gray_frame, frame_, next_pts, prev_pts,
+                         status, err);
+    vector<double> norms;
+    for (int i = status.size() - 1; i >= 0; i--) {
+        if (status[i] == 0) {
+            status.erase(status.begin() + i);
+            corners.erase(corners.begin() + i);
+            next_pts.erase(next_pts.begin() + i);
+            err.erase(err.begin() + i);
+        }
+    }
+    for(int i = 0 ; i < corners.size(); i++){
+        norms.push_back(norm(next_pts[i] - prev_pts[i]));
+    }
+    vector<double> copy_norms(norms.size());
+    std::copy(norms.begin(), norms.end(), copy_norms.begin());
+    int size_norms = norms.size();
+    std::nth_element(copy_norms.begin(), copy_norms.begin() + size_norms / 2,
+                     copy_norms.end());
+
+    double median = copy_norms[size_norms / 2];
+
+    for (int i = norms.size() - 1; i >= 0; i--) {
+        if (norms[i] > median) {
+            status.erase(status.begin() + i);
+            corners.erase(corners.begin() + i);
+            next_pts.erase(next_pts.begin() + i);
+            prev_pts.erase(prev_pts.begin() + i);
+            norms.erase(norms.begin() + i);
+        }
+    }
+    if(corners.size() < 2)
+        throw "no corners";
+
+    vector<float> shiftX, shiftY;
+    for (int i = 0; i < corners.size(); ++i) {
+        shiftX.push_back((next_pts[i].x - corners[i].x));
+        shiftY.push_back((next_pts[i].y - corners[i].y));
+    }
+    std::nth_element(shiftX.begin(), shiftX.begin() + shiftX.size() / 2,
+                     shiftX.end());
+    std::nth_element(shiftX.begin(), shiftX.begin() + shiftX.size() / 2,
+                     shiftX.end());
+    Point2f median_shift(shiftX[shiftX.size() / 2],
+                         shiftY[shiftY.size() / 2]);
+
+    vector<double> scales;
+
+    for (int i = 0; i < corners.size(); i++) {
+        for (int j = i + 1; j < corners.size(); j++) {
+            double next_norm = norm(next_pts[i]) ;
+            double prev_norm = norm(corners[i]);
+            scales.push_back(next_norm / prev_norm);
         }
     }
 
-    std::vector<Point> distance;
-    for(int i = 0 ; i < prevPts.size(); i++){
-        distance[i].x = nextPts[i].x - prevPts[i].x;
-        distance[i].y = nextPts[i].y - prevPts[i].y;
-    }
-    size_t n = distance.size() / 2;
+    std::nth_element(scales.begin(), scales.begin() + scales.size() / 2,
+                scales.end());
+    double coeff = scales[scales.size() / 2];
 
+    Rect next_position    = position_ + Point(median_shift);
+    next_position.width  *= coeff;
+    next_position.height *= coeff;
 
-    Point median;
+    position_ = next_position;
+    frame_    = gray_frame;
 
-    std::nth_element(distance.begin(), distance.begin() + n, distance.end(), [](const Point& p1,
-                                                                                const Point& p2){
-        return p1.x < p2.x;
-    });
-
-    median.x = distance[n].x;
-
-    std::nth_element(distance.begin(), distance.begin() + n, distance.end(), [](const Point& p1,
-                                                                                const Point& p2){
-        return p1.y < p2.y;
-    });
-
-    median.y = distance[n].y;
-
-
-    return cv::Rect(median.x - position_.width / 2, median.y - position_.height / 2,
-                    position_.width, position_.height);
+    return next_position;
 }
+
