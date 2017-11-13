@@ -5,7 +5,7 @@ foreach(app_filename ${app_list})
   # Get file name without extension.
   get_filename_component(app ${app_filename} NAME_WE)
   # Add and configure executable file to be produced.
-  add_executable(${app} ${app_filename})
+  add_executable(${app} ${app_filename} detection_demo.cpp)
   if (UNIX)
       target_link_libraries(${target} ${app} ${CMAKE_THREAD_LIBS_INIT})
   endif (UNIX)
