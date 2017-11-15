@@ -30,7 +30,7 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     goodFeaturesToTrack(object, corners, 100, 0.01, 5);
 
     if (corners.empty()) {
-        throw "corners is empty!!!";
+        throw "corners is empty!";
     }
 
     Mat gray_frame;
@@ -72,9 +72,9 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
         norms.push_back(norm(next_pts[i] - prev_pts[i]));
     }
     vector<double> copy_norms(norms.size());
-    std::copy(norms.begin(), norms.end(), copy_norms.begin());
+    copy(norms.begin(), norms.end(), copy_norms.begin());
     int size_norms = norms.size();
-    std::nth_element(copy_norms.begin(), copy_norms.begin() + size_norms / 2,
+    nth_element(copy_norms.begin(), copy_norms.begin() + size_norms / 2,
                      copy_norms.end());
 
     double median = copy_norms[size_norms / 2];
@@ -96,9 +96,9 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
         shiftX.push_back((next_pts[i].x - corners[i].x));
         shiftY.push_back((next_pts[i].y - corners[i].y));
     }
-    std::nth_element(shiftX.begin(), shiftX.begin() + shiftX.size() / 2,
+    nth_element(shiftX.begin(), shiftX.begin() + shiftX.size() / 2,
                      shiftX.end());
-    std::nth_element(shiftX.begin(), shiftX.begin() + shiftX.size() / 2,
+    nth_element(shiftX.begin(), shiftX.begin() + shiftX.size() / 2,
                      shiftX.end());
     Point2f median_shift(shiftX[shiftX.size() / 2],
                          shiftY[shiftY.size() / 2]);
@@ -109,11 +109,11 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
         for (int j = i + 1; j < corners.size(); j++) {
             double next_norm = norm(next_pts[i]) ;
             double prev_norm = norm(corners[i]);
-            scales.push_back(next_norm / prev_norm);
+            scales.push_back(prev_norm / next_norm);
         }
     }
 
-    std::nth_element(scales.begin(), scales.begin() + scales.size() / 2,
+    nth_element(scales.begin(), scales.begin() + scales.size() / 2,
                 scales.end());
     double coeff = scales[scales.size() / 2];
 
@@ -124,6 +124,29 @@ cv::Rect MedianFlowTracker::Track(const cv::Mat &frame) {
     position_ = next_position;
     frame_    = gray_frame;
 
+    if(next_position.x < 0 && next_position.x + next_position.width <= 0)
+        throw  "no corners";
+    if(next_position.x < 0 && next_position.x + next_position.width > 0){
+        next_position.width += next_position.x;
+        next_position.x = 0;
+    }
+    if (next_position.x >= frame.cols)
+        throw "no corners";
+    if (next_position.x < frame.cols && next_position.x + next_position.width > frame.cols){
+        next_position.width = frame.cols - next_position.x;
+    }
+
+    if(next_position.y < 0 && next_position.y + next_position.height <= 0)
+        throw  "no corners";
+    if(next_position.y < 0 && next_position.y + next_position.height > 0){
+        next_position.height += next_position.y;
+        next_position.y = 0;
+    }
+    if (next_position.y >= frame.rows)
+        throw "no corners";
+    if (next_position.y < frame.rows && next_position.y + next_position.height > frame.rows){
+        next_position.height = frame.rows - next_position.y;
+    }
+
     return next_position;
 }
-

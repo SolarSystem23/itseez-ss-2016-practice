@@ -82,8 +82,8 @@ int main(int argc, const char** argv) {
                               mouseCallbackState.point_second.y -
                               mouseCallbackState.point_first.y);
 
-        cv::rectangle(copy_frame, object, cv::Scalar(0, 255, 0));
-        cv::imshow("window", copy_frame);
+        rectangle(copy_frame, object, cv::Scalar(0, 255, 0));
+        imshow("window", copy_frame);
         int c = cv::waitKey(33);
         if(c == 27)
             break;
@@ -93,16 +93,20 @@ int main(int argc, const char** argv) {
 
     while(true){
         video >> frame;
-        cv::Rect roi;
+        Rect roi;
         try {
             roi = tracker->Track(frame);
+
         }
+
         catch(char const * msg){
             cout << msg << endl;
             return -1;
         }
-        cv::rectangle(frame, roi, cv::Scalar(0, 255, 0));
-        cv::imshow("window", frame);
+
+        std::cout << "roi : " << roi << endl;
+        rectangle(frame, roi, cv::Scalar(0, 255, 0));
+        imshow("window", frame);
         int c = cv::waitKey(33);
         if(c == 27)
             break;
